@@ -1,45 +1,427 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>YKS Kitap Takip</title>
-
-  <!-- React ve Babel -->
-  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-  <!-- Tailwind -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- PWA Manifest -->
-  <link rel="manifest" href="manifest.json" />
-  <meta name="theme-color" content="#3498DB" />
-  <link rel="apple-touch-icon" href="icon.png" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-  <meta name="apple-mobile-web-app-title" content="YKS Kitap Takip" />
-
-  <!-- Favicon Emoji -->
-  <link
-    rel="icon"
-    href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📖</text></svg>"
-  />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YKS Kitap Takip</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#3498DB">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>">
+    
+    <!-- PWA Meta Tags -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="YKS Kitap Takip">
 </head>
 <body>
-  <div id="root"></div>
-  <script type="text/babel" src="app.js"></script>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useEffect } = React;
 
-  <!-- Service Worker -->
-  <script>
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
-          .then(registration => console.log('SW registered'))
-          .catch(error => console.log('SW registration failed'));
-      });
-    }
-  </script>
+        const App = () => {
+          const [darkMode, setDarkMode] = useState(false);
+          const [currentPage, setCurrentPage] = useState('home');
+          const [books, setBooks] = useState([]);
+          const [filter, setFilter] = useState({ type: 'all', subject: 'all' });
+          const [searchTerm, setSearchTerm] = useState('');
+          const [bookForm, setBookForm] = useState({
+            name: '',
+            author: '',
+            publisher: '',
+            type: '',
+            subject: '',
+            topics: []
+          });
+          const [editingBook, setEditingBook] = useState(null);
+          const [selectedBook, setSelectedBook] = useState(null);
+
+          // PWA Install prompt
+          const [deferredPrompt, setDeferredPrompt] = useState(null);
+          const [showInstallButton, setShowInstallButton] = useState(false);
+
+          useEffect(() => {
+            const handler = (e) => {
+              e.preventDefault();
+              setDeferredPrompt(e);
+              setShowInstallButton(true);
+            };
+
+            window.addEventListener('beforeinstallprompt', handler);
+            return () => window.removeEventListener('beforeinstallprompt', handler);
+          }, []);
+
+          const installPWA = async () => {
+            if (!deferredPrompt) return;
+            
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            
+            if (outcome === 'accepted') {
+              setDeferredPrompt(null);
+              setShowInstallButton(false);
+            }
+          };
+
+          // Icons (simplified for web version)
+          const BookIcon = () => <span>📖</span>;
+          const MathIcon = () => <span>🧮</span>;
+          const GeometryIcon = () => <span>📐</span>;
+          const PhysicsIcon = () => <span>⚡</span>;
+          const ChemistryIcon = () => <span>🧪</span>;
+          const BiologyIcon = () => <span>🍃</span>;
+          const HistoryIcon = () => <span>🕒</span>;
+          const GeographyIcon = () => <span>🌍</span>;
+          const PhilosophyIcon = () => <span>🧠</span>;
+          const ReligionIcon = () => <span>❤️</span>;
+
+          // Ders logoları ve renkleri
+          const subjectConfig = {
+            'Türkçe': { icon: BookIcon, color: '#E74C3C' },
+            'Matematik': { icon: MathIcon, color: '#3498DB' },
+            'Geometri': { icon: GeometryIcon, color: '#9B59B6' },
+            'Fizik': { icon: PhysicsIcon, color: '#E67E22' },
+            'Kimya': { icon: ChemistryIcon, color: '#27AE60' },
+            'Biyoloji': { icon: BiologyIcon, color: '#1ABC9C' },
+            'Tarih': { icon: HistoryIcon, color: '#8B4513' },
+            'Coğrafya': { icon: GeographyIcon, color: '#16A085' },
+            'Felsefe': { icon: PhilosophyIcon, color: '#34495E' },
+            'Din Kültürü': { icon: ReligionIcon, color: '#7D3C98' }
+          };
+
+          // Tüm konular birleştirilmiş hali
+          const allSubjectTopics = {
+            'Türkçe': {
+              TYT: [
+                'Sözcükte Anlam', 'Söz Yorumu', 'Deyim ve Atasözü', 'Cümlede Anlam', 'Paragraf',
+                'Paragrafta Anlatım Teknikleri', 'Paragrafta Düşünceyi Geliştirme Yolları', 'Paragrafta Yapı',
+                'Paragrafta Konu-Ana Düşünce', 'Paragrafta Yardımcı Düşünce', 'Ses Bilgisi', 'Yazım Kuralları',
+                'Noktalama İşaretleri', 'Sözcükte Yapı/Ekler', 'Sözcük Türleri', 'İsimler', 'Zamirler',
+                'Sıfatlar', 'Zarflar', 'Edat – Bağlaç – Ünlem', 'Fiiller', 'Fiilde Anlam', 'Ek Fiil',
+                'Fiilimsi', 'Fiilde Çatı', 'Sözcük Grupları', 'Cümlenin Ögeleri', 'Cümle Türleri', 'Anlatım Bozukluğu'
+              ],
+              AYT: [
+                'Hikaye', 'Şiir', 'Roman', 'Tiyatro', 'Masal', 'Fabl', 'Destan', 'Efsane',
+                'Biyografi', 'Otobiyografi', 'Anı', 'Hatıra', 'Mektup', 'E-Posta', 'Günlük', 'Blog',
+                'Haber Metni', 'Gezi Yazısı', 'Makale', 'Sohbet', 'Fıkra', 'Eleştiri', 'Mülakat',
+                'Röportaj', 'Deneme', 'Söylev', 'Nutuk', 'İslamiyet Öncesi Türk Edebiyatı',
+                'Halk Edebiyatı', 'Divan Edebiyatı', 'Tanzimat Edebiyatı', 'Servet-i Fünun',
+                'Fecr-i Ati', 'Milli Edebiyat', 'Cumhuriyet Dönemi Edebiyatı', 'Batı Edebiyat Akımları',
+                'Anlam Bilgisi', 'Şiir Bilgisi', 'Edebi Sanatlar'
+              ]
+            },
+            'Matematik': {
+              TYT: [
+                'Temel Kavramlar', 'Sayı Basamakları', 'Bölme ve Bölünebilme', 'EBOB – EKOK',
+                'Rasyonel Sayılar', 'Basit Eşitsizlikler', 'Mutlak Değer', 'Üslü Sayılar', 'Köklü Sayılar',
+                'Çarpanlara Ayırma', 'Oran Orantı', 'Denklem Çözme', 'Sayı Problemleri', 'Kesir Problemleri',
+                'Yaş Problemleri', 'Hareket Problemleri', 'İşçi Problemleri', 'Yüzde Problemleri',
+                'Kar Zarar Problemleri', 'Karışım Problemleri', 'Grafik Problemleri', 'Rutin Olmayan Problemler',
+                'Kümeler', 'Kartezyen Çarpım', 'Mantık', 'Fonksiyonlar', 'Polinomlar', '2.Dereceden Denklemler',
+                'Permütasyon', 'Kombinasyon', 'Olasılık', 'Veri', 'İstatistik'
+              ],
+              AYT: [
+                'Kümeler', 'Denklem ve Eşitsizlikler', 'Üslü İfadeler', 'Fonksiyon Kavramı', 'Üçgenler',
+                'Veri ve Grafik', 'Basit Olasılık', 'Sayma', 'Fonksiyonlarla İşlemler', 'Fonksiyon Simetrileri',
+                'Bileşke Fonksiyon', 'Ters Fonksiyon', 'Dörtgenler', 'Çokgenler', 'İkinci Dereceden Denklemler',
+                'Polinomlar', 'Trigonometri', 'Yönlü Açılar', 'Trigonometrik Fonksiyonlar', 'Analitik Geometri',
+                'Doğrunun Analizi', 'Denklem Sistemleri', 'Eşitsizlik Sistemleri', 'Çember', 'Daire',
+                'Uzay Geometri', 'Koşullu Olasılık', 'Üstel Fonksiyonlar', 'Logaritma', 'Diziler',
+                'Limit', 'Süreklilik', 'Türev', 'Türevin Uygulamaları', 'Belirsiz İntegral', 'Belirli İntegral',
+                'Toplam-Fark Formülleri', 'Trigonometrik Denklemler', 'Dönüşümler', 'Çemberin Analizi'
+              ]
+            },
+            // Diğer dersler için kısaltılmış versiyon (gerçekte tümü olacak)
+            'Fizik': {
+              TYT: ['Fizik Bilimine Giriş', 'Madde ve Özellikleri', 'Basınç', 'Isı ve Sıcaklık', 'Hareket', 'Elektrik', 'Optik'],
+              AYT: ['Mekanik', 'Termodinamik', 'Elektrik-Manyetizma', 'Optik', 'Modern Fizik', 'Atom Fiziği']
+            }
+          };
+
+          // Konuları birleştir
+          const getTopicsForBook = (type, subject) => {
+            const topics = [];
+            const subjectTopics = allSubjectTopics[subject];
+            
+            if (!subjectTopics) return [];
+            
+            if (type === 'TYT' && subjectTopics.TYT) {
+              topics.push(...subjectTopics.TYT.map(topic => ({ name: topic, completed: false, type: 'TYT' })));
+            } else if (type === 'AYT' && subjectTopics.AYT) {
+              topics.push(...subjectTopics.AYT.map(topic => ({ name: topic, completed: false, type: 'AYT' })));
+            } else if (type === 'TYT-AYT') {
+              if (subjectTopics.TYT) {
+                topics.push(...subjectTopics.TYT.map(topic => ({ name: topic, completed: false, type: 'TYT' })));
+              }
+              if (subjectTopics.AYT) {
+                topics.push(...subjectTopics.AYT.map(topic => ({ name: topic, completed: false, type: 'AYT' })));
+              }
+            }
+            
+            return topics;
+          };
+
+          // Kitap ekle
+          const addBook = () => {
+            if (!bookForm.name || !bookForm.type || !bookForm.subject) return;
+            
+            const topics = getTopicsForBook(bookForm.type, bookForm.subject);
+            
+            const newBook = {
+              id: Date.now(),
+              ...bookForm,
+              topics,
+              createdAt: new Date().toISOString()
+            };
+            
+            setBooks([...books, newBook]);
+            setBookForm({ name: '', author: '', publisher: '', type: '', subject: '', topics: [] });
+            setCurrentPage('home');
+          };
+
+          // Progress hesapla
+          const getProgress = (topics) => {
+            if (topics.length === 0) return 0;
+            return Math.round((topics.filter(t => t.completed).length / topics.length) * 100);
+          };
+
+          const SubjectIcon = ({ subject, size = 20 }) => {
+            const config = subjectConfig[subject];
+            if (!config) return null;
+            
+            const IconComponent = config.icon;
+            return <span style={{ color: config.color, fontSize: `${size}px` }}><IconComponent /></span>;
+          };
+
+          return (
+            <div className={`min-h-screen ${darkMode ? 'bg-gray-900' : 'bg-gray-50'} transition-colors`}>
+              {/* Header */}
+              <header className={`${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b sticky top-0 z-10`}>
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                  <div className="flex items-center justify-between h-16">
+                    <div className="flex items-center gap-3">
+                      <div className="bg-gradient-to-r from-blue-500 to-purple-600 p-2 rounded-lg">
+                        <span className="text-white text-xl">📖</span>
+                      </div>
+                      <h1 className={`text-xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                        YKS Kitap Takip
+                      </h1>
+                    </div>
+                    
+                    <div className="flex items-center gap-4">
+                      {showInstallButton && (
+                        <button
+                          onClick={installPWA}
+                          className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-3 py-2 rounded-lg font-medium text-sm"
+                        >
+                          📱 Telefona Kur
+                        </button>
+                      )}
+                      
+                      <button
+                        onClick={() => setDarkMode(!darkMode)}
+                        className={`p-2 rounded-lg ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                      >
+                        {darkMode ? '☀️' : '🌙'}
+                      </button>
+                      
+                      {currentPage === 'home' && (
+                        <button
+                          onClick={() => setCurrentPage('add')}
+                          className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg font-medium"
+                        >
+                          ➕ Kitap Ekle
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </header>
+
+              {/* Content */}
+              <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                {/* Ana Sayfa İçeriği Buraya */}
+                {currentPage === 'home' && (
+                  <div className="text-center py-12">
+                    <h2 className={`text-2xl font-bold mb-4 ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                      YKS Kitap Takip Uygulaması
+                    </h2>
+                    <p className={`text-lg mb-8 ${darkMode ? 'text-gray-300' : 'text-gray-600'}`}>
+                      YKS hazırlığında kitaplarınızı ve konularınızı takip edin!
+                    </p>
+                    <button
+                      onClick={() => setCurrentPage('add')}
+                      className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium text-lg"
+                    >
+                      İlk Kitabını Ekle
+                    </button>
+                  </div>
+                )}
+
+                {/* Kitap Ekleme Sayfası */}
+                {currentPage === 'add' && (
+                  <div className="max-w-2xl mx-auto">
+                    <div className="flex items-center gap-3 mb-6">
+                      <button
+                        onClick={() => setCurrentPage('home')}
+                        className={`p-2 rounded-lg ${darkMode ? 'hover:bg-gray-700' : 'hover:bg-gray-100'}`}
+                      >
+                        ← Geri
+                      </button>
+                      <h1 className={`text-2xl font-bold ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                        Yeni Kitap Ekle
+                      </h1>
+                    </div>
+
+                    <div className={`${darkMode ? 'bg-gray-800' : 'bg-white'} rounded-xl p-6 border ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
+                      <div className="space-y-4">
+                        {/* Kitap Türü */}
+                        <div>
+                          <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                            Kitap Türü *
+                          </label>
+                          <div className="grid grid-cols-3 gap-3">
+                            {['TYT', 'AYT', 'TYT-AYT'].map(type => (
+                              <button
+                                key={type}
+                                onClick={() => setBookForm({...bookForm, type})}
+                                className={`p-3 rounded-lg border transition-all ${
+                                  bookForm.type === type
+                                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                                    : darkMode 
+                                      ? 'border-gray-600 hover:border-gray-500 text-gray-300'
+                                      : 'border-gray-300 hover:border-gray-400 text-gray-700'
+                                }`}
+                              >
+                                {type}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Ders Seçimi */}
+                        {bookForm.type && (
+                          <div>
+                            <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                              Ders *
+                            </label>
+                            <div className="grid grid-cols-2 gap-3">
+                              {Object.keys(subjectConfig).map(subject => (
+                                <button
+                                  key={subject}
+                                  onClick={() => setBookForm({...bookForm, subject})}
+                                  className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
+                                    bookForm.subject === subject
+                                      ? 'border-blue-500 bg-blue-50'
+                                      : darkMode 
+                                        ? 'border-gray-600 hover:border-gray-500 bg-gray-700'
+                                        : 'border-gray-300 hover:border-gray-400 bg-white'
+                                  }`}
+                                >
+                                  <SubjectIcon subject={subject} size={20} />
+                                  <span className={`font-medium ${
+                                    bookForm.subject === subject 
+                                      ? 'text-blue-700' 
+                                      : darkMode ? 'text-gray-300' : 'text-gray-700'
+                                  }`}>
+                                    {subject}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Kitap Bilgileri */}
+                        {bookForm.subject && (
+                          <>
+                            <div>
+                              <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                                Kitap Adı *
+                              </label>
+                              <input
+                                type="text"
+                                value={bookForm.name}
+                                onChange={(e) => setBookForm({...bookForm, name: e.target.value})}
+                                className={`w-full px-3 py-2 rounded-lg border ${
+                                  darkMode 
+                                    ? 'bg-gray-700 border-gray-600 text-white' 
+                                    : 'bg-white border-gray-300 text-gray-900'
+                                } focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                                placeholder="Kitap adını girin"
+                              />
+                            </div>
+
+                            <div>
+                              <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                                Yazar
+                              </label>
+                              <input
+                                type="text"
+                                value={bookForm.author}
+                                onChange={(e) => setBookForm({...bookForm, author: e.target.value})}
+                                className={`w-full px-3 py-2 rounded-lg border ${
+                                  darkMode 
+                                    ? 'bg-gray-700 border-gray-600 text-white' 
+                                    : 'bg-white border-gray-300 text-gray-900'
+                                } focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                                placeholder="Yazar adını girin"
+                              />
+                            </div>
+
+                            <div>
+                              <label className={`block text-sm font-medium mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                                Yayın Evi
+                              </label>
+                              <input
+                                type="text"
+                                value={bookForm.publisher}
+                                onChange={(e) => setBookForm({...bookForm, publisher: e.target.value})}
+                                className={`w-full px-3 py-2 rounded-lg border ${
+                                  darkMode 
+                                    ? 'bg-gray-700 border-gray-600 text-white' 
+                                    : 'bg-white border-gray-300 text-gray-900'
+                                } focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
+                                placeholder="Yayın evi adını girin"
+                              />
+                            </div>
+
+                            <button
+                              onClick={addBook}
+                              disabled={!bookForm.name || !bookForm.type || !bookForm.subject}
+                              className="w-full py-3 px-4 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors"
+                            >
+                              Kitabı Ekle
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </main>
+            </div>
+          );
+        };
+
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+    
+    <!-- Service Worker -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => console.log('SW registered'))
+                    .catch(error => console.log('SW registration failed'));
+            });
+        }
+    </script>
 </body>
 </html>
