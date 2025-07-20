@@ -34,9 +34,15 @@
     const { useState, useEffect } = React;
 
     const App = () => {
-      const [darkMode, setDarkMode] = useState(false);
+      const [darkMode, setDarkMode] = useState(() => {
+        const savedMode = localStorage.getItem('yks-darkmode');
+        return savedMode ? JSON.parse(savedMode) : false;
+      });
       const [currentPage, setCurrentPage] = useState('home');
-      const [books, setBooks] = useState([]);
+      const [books, setBooks] = useState(() => {
+        const savedBooks = localStorage.getItem('yks-books');
+        return savedBooks ? JSON.parse(savedBooks) : [];
+      });
       const [filter, setFilter] = useState({ type: 'all', subject: 'all' });
       const [searchTerm, setSearchTerm] = useState('');
       const [bookForm, setBookForm] = useState({
@@ -64,6 +70,16 @@
         window.addEventListener('beforeinstallprompt', handler);
         return () => window.removeEventListener('beforeinstallprompt', handler);
       }, []);
+
+      // LocalStorage'a kaydet
+      useEffect(() => {
+        localStorage.setItem('yks-books', JSON.stringify(books));
+      }, [books]);
+
+      // DarkMode'u kaydet
+      useEffect(() => {
+        localStorage.setItem('yks-darkmode', JSON.stringify(darkMode));
+      }, [darkMode]);
 
       const installPWA = async () => {
         if (!deferredPrompt) return;
